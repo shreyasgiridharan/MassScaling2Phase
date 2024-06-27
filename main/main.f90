@@ -1,6 +1,6 @@
     module modulefem
     !*********************************************************************
-    !    Function:
+    !    Function: Initialise all variables. Define all allocatables
     !**********************************************************************
 
 
@@ -46,7 +46,7 @@
 
     subroutine solve()
     !**********************************************************************
-    !    Function:
+    !    Function: Compute solution over a loop
     !**********************************************************************
 
     implicit none
@@ -69,7 +69,7 @@
     duration  = totaltime/ndtn
     time=0.d0
 
-
+    ! Run the solution over a loop
     do ITime = 1, ndtn ! physical time scale
         time = time + duration
         factor=ITime/ndtn
@@ -79,6 +79,10 @@
         call DetRho()
         call Map2nod()
 
+        ! Compute the error in the substep and iterate till convergance
+        ! Prof. Stolle is not really sure on which approach is more efficient
+        ! Will have to perform some studies, BVL to evaluate
+        ! Here, implementing both types
         do while(iter.le.niter.and.error.gt.tolerance)
             !do while(error.gt.tolerance)
             !do while(error2.gt.tolerance)
@@ -182,7 +186,7 @@
 
     subroutine readdata()
     !**********************************************************************
-    !    Function: Make a file
+    !    Function: Read the file
     !**********************************************************************
 
     implicit none
@@ -278,6 +282,8 @@
     !PHI  = SIN(PI*MatProp(5)/180.D0)
     !PSI  = SIN(PI*MatProp(6)/180.D0)
     !COH = MatProp(7)*COS(PI*PHI/180.D0)
+
+    ! Apply boundary conditions
     IsFixDof = .false.
     !IsFixDof(1) = .true.
     !IsFixDof(2) = .true.
@@ -301,7 +307,7 @@
         end if
     end do
 
-    !Initial stresses, gravity stress
+    !Initial stresses, gravity stress initialisation
     !do IEl = 1, nel
     !    INod(:) = ICon(:, IEl)
     !    !do ig = 1, 4
@@ -338,8 +344,8 @@
     rhoD= (1.d0-poro)*rhoS
     rhoSat= rhoD + poro * rhoW
 
-    temp = 1.d0/sqrt(3.d0)
-    !temp=0.d0
+    temp = 1.d0/sqrt(3.d0) ! 4 Gauß Points
+    !temp=0.d0 ! 1 Gauß Points
 
     B = 0.0d0
 
@@ -375,7 +381,7 @@
             dNxi(1, 4) = -0.25D0 * sp; dNxi(2, 1) = -0.25D0 * rm; dNxi(2, 2) = -0.25D0 * rp
             dNxi(2, 3) = +0.25D0 * rp; dNxi(2, 4) = +0.25D0 * rm
 
-            HS(1, iel, ig) = (1.D0 - xi)*(1.D0 - eta)/4.D0
+            HS(1, iel, ig) = (1.D0 - xi)*(1.D0 - eta)/4.D0 ! Shape Functions
             HS(2, iel, ig) = (1.D0 + xi)*(1.D0 - eta)/4.D0
             HS(3, iel, ig) = (1.D0 + xi)*(1.D0 + eta)/4.D0
             HS(4, iel, ig) = (1.D0 - xi)*(1.D0 + eta)/4.D0
@@ -387,21 +393,21 @@
             do I = 1, 2
                 do J = 1, 2
                     do K = 1, 4
-                        Ja(I, J) = Ja(I, J) + dNxi(I, K) * NodCo(J, INod(K))
+                        Ja(I, J) = Ja(I, J) + dNxi(I, K) * NodCo(J, INod(K)) ! Jacobian
                     end do
                 end do
             end do
             A = Ja(1, 1) * Ja(2, 2) - Ja(1, 2) * Ja(2, 1)
 
             if (A .gt. 0.D0) then
-                JaI(1, 1) = +Ja(2, 2)/A; JaI(1, 2) = -Ja(1, 2)/A
+                JaI(1, 1) = +Ja(2, 2)/A; JaI(1, 2) = -Ja(1, 2)/A ! Inverse of Jacobian
                 JaI(2, 1) = -Ja(2, 1)/A; JaI(2, 2) = +Ja(1, 1)/A
             else
                 write(LOGUnit, *) 'negative or zero Jacobian !!'; stop
             end if
 
             do J = 1, 4
-                B(1, J, IEl, ig) = dNxi(1, J) * JaI(1, 1) + dNxi(2, J) * JaI(1, 2)
+                B(1, J, IEl, ig) = dNxi(1, J) * JaI(1, 1) + dNxi(2, J) * JaI(1, 2) ! Strain displacement matrix
                 B(2, J, IEl, ig) = dNxi(1, J) * JaI(2, 1) + dNxi(2, J) * JaI(2, 2)
             end do
         enddo
@@ -414,7 +420,7 @@
 
     subroutine DetRho()
     !**********************************************************************
-    !    Function: Determine critical densities
+    !    Function: Determine critical densities. Refer to Prof. Stolle's notes on Dynamic Relaxation
     !**********************************************************************
 
     implicit none
@@ -530,7 +536,7 @@
     subroutine Map2NodIntr()
 
     !**********************************************************************
-    !    Function: Internal at each nodes
+    !    Function: Internal forces  at each nodes
     !**********************************************************************
 
     implicit none
@@ -659,8 +665,6 @@
             dEpsG(1:2, ig, IEl) = dEps(1:2)
             dEpsG(3, ig, IEl) = dEps(3)
 
-
-
             ! Pressure increment
             dPore = (( (1-poro) * delV (1) + poro * delW(1) ) + ((1-poro) * delV (2) + poro * delW(2) ) ) * ( ( dtime * BulkW ) / poro )
 
@@ -686,11 +690,12 @@
 
 
         do ig = 1, 4
-            !call Elastic(MatProp(1), MatProp(2), Epsg(:,ig,IEL), SigE(:,ig,IEl))
+            
             call Elastic(MatProp(1), MatProp(2), dEpsg(:,ig,IEL), SigE(:,ig,IEl))
             !dSig = 0.d0
             !call Elastic(MatProp(1), MatProp(2), deps, dSig)
             !SigE(:,ig,IEl) = SigE(:,ig,IEl) + dSig(1:3)
+            ! Plastic corrector, Mohr Coulomb. Using the Plaxis implementation here
             if(itime*dt.gt.5000.d0) then
                 call MOHRC(SIN(4.d0*atan(1.d0)*10.d0/180.D0),0.d0,0.d0,MatProp(1),MatProp(2),SigE(:,ig,IEl),NPLAST,fbarnew(1,ig,iel),PlastInd(1,ig,Iel)) ! Mohr model
             end if
@@ -757,8 +762,8 @@
 
     subroutine VonMises(E, enu, Yield, Eps3, EpsP, s, EpsE)
     !*********************************************************************
-    ! Von Mises Elasto-Plastic Model
-    !*******************************************************************************
+    ! Von Mises Elasto-Plastic Model.
+    !************************************************************************ ******
 
     implicit double precision (a - h, o - z)
 
@@ -1015,7 +1020,7 @@
     subroutine WtRES(IStep)
     !**********************************************************************
     !
-    !    Function:
+    !    Function: Output to GiD
     !
     !**********************************************************************
 
